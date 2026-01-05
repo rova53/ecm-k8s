@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: identity-service
+  namespace: ecom2micro-minimal
+  labels:
+    app: identity
+spec:
+  ports:
+  - port: 5001
+    targetPort: 5001
+    name: http
+  selector:
+    app: identity
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity
+  namespace: ecom2micro-minimal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: identity
+  template:
+    metadata:
+      labels:
+        app: identity
+    spec:
+      containers:
+      - name: identity
+        image: rova53/identity-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5001
+          name: http
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          value: "Production"
+        - name: ASPNETCORE_URLS
+          value: "http://+:5001"
+        - name: ConnectionStrings__IdentityDb
+          value: "Host=postgres-service;Port=5432;Database=ecom2micro;Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD);Search Path=identity_schema"
+        - name: Kafka__BootstrapServers
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: KAFKA_BOOTSTRAP_SERVERS
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: JWT_SECRET
+        - name: JWT_ISSUER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: JWT_ISSUER
+        - name: JWT_AUDIENCE
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: JWT_AUDIENCE
+        - name: Redis__ConnectionString
+          value: "redis-service:6379"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 5001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 5001
+          initialDelaySeconds: 10
+          periodSeconds: 5

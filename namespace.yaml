@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ecom2micro-minimal
+  labels:
+    app: ecom2micro
+    environment: minimal

@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ecom2micro-minimal
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  - kafka/zookeeper-statefulset.yaml
+  - kafka/kafka-statefulset.yaml
+  - postgres/postgres-configmap.yaml
+  - postgres/postgres-statefulset.yaml
+  - redis/redis-deployment.yaml
+  - services/gateway-deployment.yaml
+  - services/identity-deployment.yaml
+  - services/catalog-deployment.yaml
+  - services/order-deployment.yaml
+
+labels:
+  - pairs:
+      app: ecom2micro
+      environment: minimal

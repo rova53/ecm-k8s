@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog-service
+  namespace: ecom2micro-minimal
+  labels:
+    app: catalog
+spec:
+  ports:
+  - port: 5002
+    targetPort: 5002
+    name: http
+  selector:
+    app: catalog
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  namespace: ecom2micro-minimal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: catalog
+  template:
+    metadata:
+      labels:
+        app: catalog
+    spec:
+      containers:
+      - name: catalog
+        image: rova53/catalog-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5002
+          name: http
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          value: "Production"
+        - name: ASPNETCORE_URLS
+          value: "http://+:5002"
+        - name: ConnectionStrings__CatalogDb
+          value: "Host=postgres-service;Port=5432;Database=ecom2micro;Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD);Search Path=catalog_schema"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        - name: Kafka__BootstrapServers
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: KAFKA_BOOTSTRAP_SERVERS
+        - name: Redis__ConnectionString
+          value: "redis-service:6379"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 5002
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 5002
+          initialDelaySeconds: 10
+          periodSeconds: 5
