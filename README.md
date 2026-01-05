@@ -6,7 +6,7 @@ Configuration ultra-minimale pour déployer ecom2micro sur Kubernetes avec seule
 
 - **RAM Total**: ~13-16 GB
 - **Infrastructure**: Kafka (4 GB), PostgreSQL multi-schéma (4 GB), Redis (1 GB)
-- **Services**: API Gateway, Identity, Catalog, Order (avec Cart/Payment intégrés)
+- **Services**: API Gateway, Identity, Catalog, Order
 - **Monitoring**: Désactivé
 - **Scalabilité**: 1 replica par service
 
@@ -36,30 +36,6 @@ kubectl cluster-info
 kubectl config current-context
 ```
 
-**Option C - Cloud (AKS, EKS, GKE)**
-```bash
-# Azure AKS
-az aks create \
-  --resource-group ecom2micro-rg \
-  --name ecom2micro-minimal \
-  --node-count 2 \
-  --node-vm-size Standard_D4s_v3 \
-  --enable-addons monitoring
-
-# AWS EKS
-eksctl create cluster \
-  --name ecom2micro-minimal \
-  --region us-west-2 \
-  --node-type t3.xlarge \
-  --nodes 2
-
-# Google GKE
-gcloud container clusters create ecom2micro-minimal \
-  --machine-type n1-standard-4 \
-  --num-nodes 2 \
-  --region us-central1
-```
-
 ### 2. Outils requis
 
 ```bash
@@ -72,43 +48,6 @@ choco install kustomize
 # helm (optionnel)
 choco install kubernetes-helm
 ```
-
-### 3. Images Docker
-
-Les services doivent être buildés et disponibles. Deux options :
-
-**Option A - Build Local**
-```bash
-cd backend/src
-docker build -t ecom2micro/api-gateway:latest -f ApiGateway/Dockerfile .
-docker build -t ecom2micro/identity-service:latest -f Services/Identity/Identity.API/Dockerfile .
-docker build -t ecom2micro/catalog-service:latest -f Services/Catalog/Catalog.API/Dockerfile .
-docker build -t ecom2micro/order-service:latest -f Services/Order/Order.API/Dockerfile .
-
-# Si Minikube, charger les images
-minikube image load ecom2micro/api-gateway:latest
-minikube image load ecom2micro/identity-service:latest
-minikube image load ecom2micro/catalog-service:latest
-minikube image load ecom2micro/order-service:latest
-```
-
-**Option B - Registry privé**
-```bash
-# Tag et push vers registry
-docker tag ecom2micro/api-gateway:latest myregistry.azurecr.io/api-gateway:latest
-docker push myregistry.azurecr.io/api-gateway:latest
-# ... répéter pour chaque service
-
-# Créer secret pour pull
-kubectl create secret docker-registry acr-secret \
-  --docker-server=myregistry.azurecr.io \
-  --docker-username=<username> \
-  --docker-password=<password> \
-  --namespace=ecom2micro-minimal
-
-# Ajouter imagePullSecrets dans les deployments
-```
-
 ## 🚀 Déploiement
 
 ### Méthode 1 - Kubectl Apply
@@ -140,43 +79,6 @@ kubectl kustomize .
 
 # Déployer
 kubectl apply -k .
-```
-
-### Méthode 3 - Script PowerShell
-
-```powershell
-# deploy-minimal.ps1
-cd k8s/minimal
-
-Write-Host "🚀 Déploiement minimal Kubernetes..." -ForegroundColor Green
-
-# Apply dans l'ordre
-kubectl apply -f namespace.yaml
-Start-Sleep -Seconds 2
-
-kubectl apply -f configmap.yaml
-kubectl apply -f secrets.yaml
-Start-Sleep -Seconds 2
-
-Write-Host "📦 Déploiement infrastructure..." -ForegroundColor Cyan
-kubectl apply -f kafka/zookeeper-statefulset.yaml
-Start-Sleep -Seconds 10
-
-kubectl apply -f kafka/kafka-statefulset.yaml
-kubectl apply -f postgres/postgres-configmap.yaml
-kubectl apply -f postgres/postgres-statefulset.yaml
-kubectl apply -f redis/redis-deployment.yaml
-Start-Sleep -Seconds 30
-
-Write-Host "🔧 Déploiement services..." -ForegroundColor Cyan
-kubectl apply -f services/identity-deployment.yaml
-kubectl apply -f services/catalog-deployment.yaml
-kubectl apply -f services/order-deployment.yaml
-Start-Sleep -Seconds 10
-
-kubectl apply -f services/gateway-deployment.yaml
-
-Write-Host "✅ Déploiement terminé!" -ForegroundColor Green
 ```
 
 ## 📊 Vérification
@@ -284,83 +186,6 @@ kubectl autoscale deployment catalog \
   --max=3 \
   -n ecom2micro-minimal
 ```
-
-## 🌐 Accès externe
-
-### Méthode 1 - Port Forward (Dev)
-
-```bash
-# Gateway
-kubectl port-forward svc/gateway-service 5000:5000 -n ecom2micro-minimal
-
-# Accès: http://localhost:5000
-```
-
-### Méthode 2 - NodePort (Minikube)
-
-```bash
-# Modifier gateway-service
-kubectl patch svc gateway-service -n ecom2micro-minimal -p '{"spec":{"type":"NodePort"}}'
-
-# Obtenir l'URL
-minikube service gateway-service -n ecom2micro-minimal --url
-
-# Accès: http://192.168.49.2:30xxx
-```
-
-### Méthode 3 - Ingress (Production)
-
-```yaml
-# ingress.yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: ecom2micro-ingress
-  namespace: ecom2micro-minimal
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
-spec:
-  ingressClassName: nginx
-  rules:
-  - host: ecom2micro.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: gateway-service
-            port:
-              number: 5000
-```
-
-```bash
-# Installer nginx-ingress (Minikube)
-minikube addons enable ingress
-
-# Ou avec Helm
-helm install nginx-ingress ingress-nginx/ingress-nginx
-
-# Apply ingress
-kubectl apply -f ingress.yaml
-
-# Ajouter au hosts (Windows: C:\Windows\System32\drivers\etc\hosts)
-192.168.49.2 ecom2micro.local
-
-# Accès: http://ecom2micro.local
-```
-
-### Méthode 4 - LoadBalancer (Cloud)
-
-Le service `gateway-service` est déjà de type `LoadBalancer`. Sur AKS/EKS/GKE, un IP publique sera automatiquement assignée.
-
-```bash
-# Obtenir l'IP externe (prend 2-3 minutes)
-kubectl get svc gateway-service -n ecom2micro-minimal -w
-
-# Accès: http://<EXTERNAL-IP>:5000
-```
-
 ## 🔍 Debugging
 
 ### Logs
