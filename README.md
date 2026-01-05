@@ -6,7 +6,7 @@ Configuration ultra-minimale pour déployer ecom2micro sur Kubernetes avec seule
 
 - **RAM Total**: ~13-16 GB
 - **Infrastructure**: Kafka (4 GB), PostgreSQL multi-schéma (4 GB), Redis (1 GB)
-- **Services**: API Gateway, Identity, Catalog, Order (avec Cart/Payment intégrés)
+- **Services**: API Gateway, Identity, Catalog, Order
 - **Monitoring**: Désactivé
 - **Scalabilité**: 1 replica par service
 
